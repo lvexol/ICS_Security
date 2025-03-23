@@ -1,0 +1,14 @@
+{
+  "test_files": [
+    "2016-01-01_151435_117.log.part11_sorted.csv"
+  ],
+  "file_metrics": [
+    {
+      "file": "2016-01-01_151435_117.log.part11_sorted.csv",
+      "accuracy": 0.33562,
+      "f1_score": 0.16872556825798363
+    }
+  ],
+  "average_accuracy": 0.33562,
+  "average_f1_score": 0.16872556825798363
+}

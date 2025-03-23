@@ -1,0 +1,22 @@
+{
+  "feature_columns": [
+    "Modbus_Function_Code",
+    "Modbus_Transaction_ID",
+    "s_port",
+    "date_encoded",
+    "time_encoded",
+    "orig_encoded",
+    "type_encoded",
+    "i/f_name_encoded",
+    "i/f_dir_encoded",
+    "dst_encoded",
+    "proto_encoded",
+    "appi_name_encoded",
+    "proxy_src_ip_encoded",
+    "Modbus_Function_Description_encoded",
+    "Modbus_Value_encoded"
+  ],
+  "num_classes": 6,
+  "window_size": 5,
+  "created_date": "2025-03-23 14:03:35"
+}

@@ -12,9 +12,6 @@ import pickle
 import os
 import json
 import sys
-import argparse
-import torch
-import h5py
 
 # Add debug print function
 def debug_print(message):
@@ -22,133 +19,214 @@ def debug_print(message):
     sys.stdout.flush()  # Ensure output is immediately displayed
 
 # 1. Data Loading and Initial Exploration
-def load_data(filepath):
-    """Load the dataset from CSV file"""
-    debug_print(f"Attempting to load data from: {filepath}")
+def load_data(filepath_or_dir, is_directory=False):
+    """
+    Load dataset(s) from CSV file(s)
     
-    # Check if file exists
-    if not os.path.exists(filepath):
-        debug_print(f"ERROR: Dataset file not found: {filepath}")
-        debug_print(f"Current working directory: {os.getcwd()}")
-        debug_print(f"Files in current directory: {os.listdir()}")
-        raise FileNotFoundError(f"Dataset file not found: {filepath}")
+    Parameters:
+    filepath_or_dir - Path to a CSV file or directory containing CSV files
+    is_directory - Boolean indicating if the path is a directory
+    
+    Returns:
+    df - DataFrame containing the loaded data
+    """
+    debug_print(f"Attempting to load data from: {filepath_or_dir}")
+    
+    if is_directory:
+        # Check if directory exists
+        if not os.path.exists(filepath_or_dir) or not os.path.isdir(filepath_or_dir):
+            debug_print(f"ERROR: Directory not found: {filepath_or_dir}")
+            debug_print(f"Current working directory: {os.getcwd()}")
+            raise FileNotFoundError(f"Directory not found: {filepath_or_dir}")
         
-    try:
-        df = pd.read_csv(filepath)
-        debug_print(f"Successfully loaded dataset with shape: {df.shape}")
-        debug_print(f"Dataset columns: {df.columns.tolist()}")
+        # Get all CSV files in the directory
+        csv_files = [f for f in os.listdir(filepath_or_dir) if f.endswith('.csv')]
+        if not csv_files:
+            debug_print(f"ERROR: No CSV files found in directory: {filepath_or_dir}")
+            raise FileNotFoundError(f"No CSV files found in directory: {filepath_or_dir}")
         
-        # Basic data validation
-        required_columns = ['src']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            debug_print(f"ERROR: Required columns missing: {missing_columns}")
-            raise ValueError(f"Required columns missing from dataset: {missing_columns}")
+        debug_print(f"Found {len(csv_files)} CSV files in directory")
         
-        return df
-    except Exception as e:
-        debug_print(f"ERROR loading data: {e}")
-        raise
+        # Load and concatenate all CSV files
+        dfs = []
+        for file in csv_files:
+            file_path = os.path.join(filepath_or_dir, file)
+            try:
+                debug_print(f"Loading file: {file}")
+                df = pd.read_csv(file_path)
+                debug_print(f"Loaded {file} with shape: {df.shape}")
+                dfs.append(df)
+            except Exception as e:
+                debug_print(f"ERROR loading file {file}: {e}")
+                # Continue with other files even if one fails
+        
+        if not dfs:
+            debug_print("ERROR: Failed to load any CSV files")
+            raise ValueError("Failed to load any CSV files")
+        
+        # Concatenate all dataframes
+        df = pd.concat(dfs, ignore_index=True)
+        debug_print(f"Combined dataset shape: {df.shape}")
+    else:
+        # Single file mode
+        # Check if file exists
+        if not os.path.exists(filepath_or_dir):
+            debug_print(f"ERROR: Dataset file not found: {filepath_or_dir}")
+            debug_print(f"Current working directory: {os.getcwd()}")
+            debug_print(f"Files in current directory: {os.listdir()}")
+            raise FileNotFoundError(f"Dataset file not found: {filepath_or_dir}")
+            
+        try:
+            df = pd.read_csv(filepath_or_dir)
+            debug_print(f"Successfully loaded dataset with shape: {df.shape}")
+        except Exception as e:
+            debug_print(f"ERROR loading data: {e}")
+            raise
+    
+    # Basic data validation
+    debug_print(f"Dataset columns: {df.columns.tolist()}")
+    required_columns = ['src']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        debug_print(f"ERROR: Required columns missing: {missing_columns}")
+        raise ValueError(f"Required columns missing from dataset: {missing_columns}")
+    
+    return df
+
+# Function to split files for training and testing
+def split_csv_files(data_dir, test_count=3):
+    """
+    Split CSV files in a directory into training and testing sets
+    
+    Parameters:
+    data_dir - Directory containing CSV files
+    test_count - Number of files to reserve for testing
+    
+    Returns:
+    train_files - List of file paths for training
+    test_files - List of file paths for testing
+    """
+    debug_print(f"Splitting CSV files in {data_dir} for training and testing")
+    
+    # Get all CSV files in the directory
+    csv_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.csv')]
+    
+    if len(csv_files) < test_count + 1:
+        debug_print(f"WARNING: Not enough CSV files for desired split. Found {len(csv_files)}, need at least {test_count + 1}")
+        test_count = max(1, len(csv_files) - 1)  # Ensure at least 1 file for training
+    
+    # Shuffle files to ensure random selection
+    np.random.shuffle(csv_files)
+    
+    # Split into training and testing sets
+    train_files = csv_files[:-test_count]
+    test_files = csv_files[-test_count:]
+    
+    debug_print(f"Selected {len(train_files)} files for training and {len(test_files)} files for testing")
+    debug_print(f"Training files: {[os.path.basename(f) for f in train_files]}")
+    debug_print(f"Testing files: {[os.path.basename(f) for f in test_files]}")
+    
+    return train_files, test_files
+
+# Function to load multiple CSV files
+def load_multiple_csv_files(file_paths):
+    """
+    Load and combine multiple CSV files
+    
+    Parameters:
+    file_paths - List of paths to CSV files
+    
+    Returns:
+    df - Combined DataFrame
+    """
+    debug_print(f"Loading {len(file_paths)} CSV files")
+    
+    dfs = []
+    for file_path in file_paths:
+        try:
+            debug_print(f"Loading file: {os.path.basename(file_path)}")
+            df = pd.read_csv(file_path)
+            debug_print(f"Loaded with shape: {df.shape}")
+            dfs.append(df)
+        except Exception as e:
+            debug_print(f"ERROR loading file {file_path}: {e}")
+            # Continue with other files even if one fails
+    
+    if not dfs:
+        debug_print("ERROR: Failed to load any CSV files")
+        raise ValueError("Failed to load any CSV files")
+    
+    # Concatenate all dataframes
+    combined_df = pd.concat(dfs, ignore_index=True)
+    debug_print(f"Combined dataset shape: {combined_df.shape}")
+    
+    return combined_df
 
 # 2. Data Preprocessing
 def preprocess_data(df, encoders=None, scaler=None, is_training=True):
     """
-    Preprocess the SCADA network logs data
-    
-    Parameters:
-    df - DataFrame containing network logs
-    encoders - Dict of Label Encoders (if None, new ones will be created)
-    scaler - StandardScaler (if None, a new one will be created)
-    is_training - Boolean to indicate if this is training data or inference data
-    
-    Returns:
-    features - Processed feature array
-    labels - Label array (or None if is_training=False)
-    encoders - Dict of fitted Label Encoders
-    scaler - Fitted StandardScaler
-    num_classes - Number of unique device classes
-    feature_cols - List of feature column names
+    Preprocess the data for model training or inference
     """
-    debug_print("Starting data preprocessing")
+    debug_print(f"Preprocessing data with shape {df.shape}")
     
-    # Create copies of data to avoid modifying the original
+    # Initialize encoders and scaler if in training mode
+    if is_training:
+        debug_print("Initializing new encoders and scaler")
+        encoders = {}
+        scaler = StandardScaler()
+    else:
+        debug_print("Using provided encoders and scaler")
+        if encoders is None or scaler is None:
+            raise ValueError("Encoders and scaler must be provided for inference")
+    
+    # Make a copy to avoid modifying the original
     df = df.copy()
     
-    # Initialize containers
-    if encoders is None and is_training:
-        encoders = {}
-        debug_print("Created new encoders dictionary")
+    # 1. Process timestamp if it exists
+    if 'timestamp' in df.columns:
+        debug_print("Processing timestamp column")
+        # Convert timestamp to datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        
+        # Extract hour and minute and create cyclical features
+        df['hour'] = df['timestamp'].dt.hour
+        df['minute'] = df['timestamp'].dt.minute
+        
+        # Create cyclical time features
+        df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
+        df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
+        df['minute_sin'] = np.sin(2 * np.pi * df['minute'] / 60)
+        df['minute_cos'] = np.cos(2 * np.pi * df['minute'] / 60)
+        
+        debug_print("Created cyclical time features")
     
-    if scaler is None and is_training:
-        scaler = StandardScaler()
-        debug_print("Created new StandardScaler")
-    
-    # Convert date and time to datetime objects if they exist
-    if 'date' in df.columns and 'time' in df.columns:
-        try:
-            debug_print("Converting date and time to datetime")
-            df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['time'], 
-                                           format='%d%b%Y %H:%M:%S', 
-                                           errors='coerce')
-            
-            # Extract time features
-            df['hour'] = df['datetime'].dt.hour
-            df['minute'] = df['datetime'].dt.minute
-            df['second'] = df['datetime'].dt.second
-            
-            # Create sine/cosine encoding for time features to capture cyclical nature
-            df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
-            df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
-            df['minute_sin'] = np.sin(2 * np.pi * df['minute'] / 60)
-            df['minute_cos'] = np.cos(2 * np.pi * df['minute'] / 60)
-            debug_print("Successfully created time features")
-        except Exception as e:
-            debug_print(f"Warning: Error processing datetime columns: {e}")
-            # Create dummy time features if datetime processing fails
-            for col in ['hour_sin', 'hour_cos', 'minute_sin', 'minute_cos']:
-                if col not in df:
-                    df[col] = 0.0
-    else:
-        debug_print("No date/time columns found, creating dummy time features")
-        # Create dummy time features if datetime columns don't exist
-        for col in ['hour_sin', 'hour_cos', 'minute_sin', 'minute_cos']:
-            if col not in df:
-                df[col] = 0.0
-                
-    # Identify categorical columns that exist in the dataset
-    potential_categorical_cols = ['orig', 'i/f_name', 'i/f_dir', 'src', 'dst', 
-                                 'proto', 'appi_name', 'SCADA_Tag']
-    categorical_cols = [col for col in potential_categorical_cols if col in df.columns]
+    # 2. Process categorical columns
+    categorical_cols = [col for col in df.columns if df[col].dtype == 'object' and col not in ['timestamp', 'src', 'SCADA_Tag']]
     debug_print(f"Found categorical columns: {categorical_cols}")
     
-    # Process categorical variables
     for col in categorical_cols:
         debug_print(f"Processing categorical column: {col}")
         if is_training:
-            # Training phase: create and fit a new encoder
-            le = LabelEncoder()
-            df[f'{col}_encoded'] = le.fit_transform(df[col].astype(str))
-            encoders[col] = le
-            debug_print(f"Created encoder for {col} with {len(le.classes_)} classes")
+            # Training phase: fit new encoder
+            encoder = LabelEncoder()
+            df[f'{col}_encoded'] = encoder.fit_transform(df[col].fillna('unknown').astype(str))
+            encoders[col] = encoder
+            debug_print(f"Fitted new encoder for {col} with {len(encoder.classes_)} classes")
         else:
             # Inference phase: use existing encoder
             if col in encoders:
+                encoder = encoders[col]
                 # Handle unseen categories
-                df[col] = df[col].astype(str)
+                df[col] = df[col].fillna('unknown').astype(str)
                 df[f'{col}_encoded'] = df[col].map(
-                    lambda x: -1 if x not in encoders[col].classes_ else encoders[col].transform([x])[0]
+                    lambda x: np.argmax(np.array(encoder.classes_) == x) if x in encoder.classes_ else len(encoder.classes_)
                 )
-                # Replace unseen categories with most common value
-                if (df[f'{col}_encoded'] == -1).any():
-                    most_common = np.bincount(
-                        [idx for idx in range(len(encoders[col].classes_))]).argmax()
-                    df.loc[df[f'{col}_encoded'] == -1, f'{col}_encoded'] = most_common
                 debug_print(f"Applied existing encoder for {col}")
             else:
-                # Handle the case where encoder wasn't created during training
-                debug_print(f"Warning: No encoder found for column {col}, using zeros")
-                df[f'{col}_encoded'] = 0
+                debug_print(f"WARNING: No encoder found for {col}, skipping")
+                continue
     
+    # 3. Process numeric columns
     # Extract Modbus function code as numeric if it exists
     if 'Modbus_Function_Code' in df.columns:
         debug_print("Processing Modbus function code")
@@ -175,29 +253,40 @@ def preprocess_data(df, encoders=None, scaler=None, is_training=True):
             df[numeric_cols] = scaler.transform(df[numeric_cols].fillna(0))
             debug_print("Applied existing scaler to numeric columns")
     
-    # Create device fingerprint label - using source IP as device identifier
-    if is_training:
-        if 'src' in df.columns:
-            debug_print("Creating device labels from source IPs")
-            # Create new LabelEncoder specifically for device labels
-            device_encoder = LabelEncoder()
-            df['device_label'] = device_encoder.fit_transform(df['src'].astype(str))
-            encoders['device'] = device_encoder
+    # Create SCADA_Tag label - this is what we want to predict
+    if 'SCADA_Tag' in df.columns:
+        debug_print("Processing SCADA_Tag labels")
+        if is_training:
+            # Create new LabelEncoder specifically for SCADA_Tag labels
+            tag_encoder = LabelEncoder()
+            df['tag_label'] = tag_encoder.fit_transform(df['SCADA_Tag'].fillna('unknown').astype(str))
+            encoders['SCADA_Tag'] = tag_encoder
             
-            # Store the number of unique devices
-            num_classes = len(device_encoder.classes_)
-            debug_print(f"Found {num_classes} unique devices for classification")
-            debug_print(f"Device classes: {device_encoder.classes_}")
+            # Store the number of unique tags
+            num_classes = len(tag_encoder.classes_)
+            debug_print(f"Found {num_classes} unique SCADA tags for classification")
+            debug_print(f"SCADA tag classes: {tag_encoder.classes_}")
         else:
-            # If source IP is not available, use a placeholder
-            debug_print("WARNING: 'src' column not found, using placeholder device label")
-            df['device_label'] = 0
-            num_classes = 1
+            # For inference/testing, use the existing encoder
+            if 'SCADA_Tag' in encoders:
+                tag_encoder = encoders['SCADA_Tag']
+                df['SCADA_Tag'] = df['SCADA_Tag'].fillna('unknown').astype(str)
+                
+                # Map SCADA tags to labels, handling unseen values
+                df['tag_label'] = df['SCADA_Tag'].map(
+                    lambda x: np.argmax(np.array(tag_encoder.classes_) == x) if x in tag_encoder.classes_ else len(tag_encoder.classes_)
+                )
+                debug_print(f"Applied existing SCADA_Tag encoder with {len(tag_encoder.classes_)} classes")
+                num_classes = len(tag_encoder.classes_)
+            else:
+                debug_print("WARNING: No SCADA_Tag encoder found, using placeholder")
+                df['tag_label'] = 0
+                num_classes = 1
     else:
-        # For inference, we don't need labels
-        df['device_label'] = 0  # Placeholder
-        num_classes = len(encoders.get('device', {}).classes_) if 'device' in encoders else 0
-        debug_print(f"Using {num_classes} device classes for inference")
+        # If SCADA_Tag is not available, use a placeholder
+        debug_print("WARNING: 'SCADA_Tag' column not found, using placeholder tag label")
+        df['tag_label'] = 0
+        num_classes = 1
     
     # Select features for model
     feature_cols = [col for col in df.columns if col.endswith('_encoded') or col in 
@@ -213,11 +302,10 @@ def preprocess_data(df, encoders=None, scaler=None, is_training=True):
     
     # Extract features and labels
     features = df[feature_cols].values
-    labels = df['device_label'].values if is_training else None
+    labels = df['tag_label'].values
     
     debug_print(f"Preprocessed features shape: {features.shape}")
-    if labels is not None:
-        debug_print(f"Labels shape: {labels.shape}")
+    debug_print(f"Labels shape: {labels.shape}")
     
     return features, labels, encoders, scaler, num_classes, feature_cols
 
@@ -355,7 +443,7 @@ def build_transformer_model(input_shape, num_classes, num_heads=4, dim_head=64, 
     return model
 
 # 6. Model Training with Cross-Validation
-def train_model_with_cv(X, y, num_classes, n_splits=5, window_size=5, hyperparams=None):
+def train_model_with_cv(X, y, num_classes, n_splits=2, window_size=5, hyperparams=None):
     """
     Train the transformer model with cross-validation
     """
@@ -363,13 +451,13 @@ def train_model_with_cv(X, y, num_classes, n_splits=5, window_size=5, hyperparam
     
     if hyperparams is None:
         hyperparams = {
-            'num_heads': 4,
-            'dim_head': 64,
-            'num_blocks': 2,
+            'num_heads': 2,  # Reduced from 4 to 2
+            'dim_head': 32,  # Reduced from 64 to 32
+            'num_blocks': 1,  # Reduced from 2 to 1
             'dropout': 0.1,
             'learning_rate': 0.001,
-            'batch_size': 64,
-            'max_epochs': 50
+            'batch_size': 128,  # Increased from 64 to 128
+            'max_epochs': 2  # Reduced from 5 to 2 epochs
         }
         debug_print(f"Using default hyperparameters: {hyperparams}")
     
@@ -515,7 +603,24 @@ def evaluate_model(model, X_test, y_test, class_names=None):
         
         # Print classification report
         debug_print("\nClassification Report:")
-        print(classification_report(y_test, y_pred_classes, target_names=class_names))
+        
+        # Get unique classes in the test data
+        unique_classes = np.unique(np.concatenate([y_test, y_pred_classes]))
+        debug_print(f"Found {len(unique_classes)} unique classes in test data: {unique_classes}")
+        
+        # If class_names is provided, filter it to match the actual classes
+        if class_names is not None:
+            # Make sure we have enough class names
+            if max(unique_classes) < len(class_names):
+                # Filter class_names to only include classes present in the data
+                filtered_class_names = [class_names[i] for i in unique_classes if i < len(class_names)]
+                debug_print(f"Using {len(filtered_class_names)} filtered class names")
+                print(classification_report(y_test, y_pred_classes, target_names=filtered_class_names, labels=unique_classes))
+            else:
+                debug_print(f"Warning: Some class indices exceed available class names. Using indices instead.")
+                print(classification_report(y_test, y_pred_classes))
+        else:
+            print(classification_report(y_test, y_pred_classes))
         
         # Return predictions and metrics
         metrics = {
@@ -629,64 +734,150 @@ def load_model_and_artifacts(base_path="model"):
 
 # 9. Main Function
 def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Run device fingerprinting on a CSV file using a trained LSTM model')
-    parser.add_argument('--input', '-i', required=True, help='Path to input CSV file')
-    parser.add_argument('--model', '-m', required=True, help='Path to H5 model file')
-    parser.add_argument('--output', '-o', help='Path to output CSV file (optional)')
-    parser.add_argument('--sequence_length', '-s', type=int, default=20, help='Sequence length (default: 20)')
-    parser.add_argument('--device', '-d', default='cpu', choices=['cpu', 'cuda'], help='Device to run inference on (default: cpu)')
-    
-    args = parser.parse_args()
-    
-    # Check if files exist
-    if not os.path.exists(args.input):
-        print(f"Error: Input file {args.input} not found")
-        return 1
-    
-    if not os.path.exists(args.model):
-        print(f"Error: Model file {args.model} not found")
-        return 1
-    
-    # Set device
-    device = torch.device(args.device if torch.cuda.is_available() and args.device == 'cuda' else 'cpu')
-    print(f"Using device: {device}")
-    
-    # Generate default output path if not provided
-    if not args.output:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        input_basename = os.path.basename(args.input).split('.')[0]
-        args.output = f"{input_basename}_fingerprinting_{timestamp}.csv"
-    
     try:
-        # Load and preprocess data
-        sequences, original_df, source_ips = preprocess_csv(args.input, args.sequence_length)
+        debug_print("Starting main function")
         
-        # Load model
-        model, device_mapping, num_classes = load_model_from_h5(args.model)
+        # Set parameters
+        data_dir = "/home/vexo/Project/rewrite/ICS_Security/Dataset"  # Directory containing CSV files
+        test_file_count = 1  # Just 1 test file
+        window_size = 5  # Reduced from 10 to 5
+        stride = 5
         
-        # Run inference
-        predictions, probabilities = run_inference(model, sequences, num_classes, device)
+        # Limit the number of training files to prevent memory issues
+        max_train_files = 2  # Reduced to just 2 files
         
-        # Generate results
-        results = generate_results(
-            predictions, 
-            probabilities, 
-            original_df, 
-            source_ips,
-            args.sequence_length, 
-            device_mapping, 
-            args.output
+        # Print current working directory and check for dataset directory
+        debug_print(f"Current working directory: {os.getcwd()}")
+        debug_print(f"Looking for dataset directory at: {data_dir}")
+        if not os.path.exists(data_dir) or not os.path.isdir(data_dir):
+            debug_print(f"ERROR: Dataset directory not found at {data_dir}")
+            debug_print(f"Files in current directory: {os.listdir()}")
+            raise FileNotFoundError(f"Dataset directory not found: {data_dir}")
+        
+        # 1. Split files for training and testing
+        debug_print("Step 1: Splitting files for training and testing")
+        all_train_files, test_files = split_csv_files(data_dir, test_count=test_file_count)
+        
+        # Limit the number of training files to prevent memory issues
+        train_files = all_train_files[:max_train_files]
+        debug_print(f"Using {len(train_files)} out of {len(all_train_files)} available training files to prevent memory issues")
+        
+        # 2. Load training data
+        debug_print("Step 2: Loading training data")
+        train_df = load_multiple_csv_files(train_files)
+        
+        # Optional: Sample the data to reduce memory usage
+        sample_fraction = 0.05  # Reduced to just 5% of the data
+        if train_df.shape[0] > 10000:  # If more than 10,000 rows
+            debug_print(f"Sampling {sample_fraction*100}% of the data to reduce memory usage")
+            train_df = train_df.sample(frac=sample_fraction, random_state=42)
+            debug_print(f"Sampled dataset shape: {train_df.shape}")
+        
+        # 3. Preprocess the training data
+        debug_print("Step 3: Preprocessing training data")
+        features, labels, encoders, scaler, num_classes, feature_cols = preprocess_data(train_df, is_training=True)
+        
+        # 4. Create sequences for training
+        debug_print("Step 4: Creating sequences for training data")
+        X, y = create_sequences(features, labels, window_size=window_size, stride=stride)
+        
+        # 5. Split training data into train and validation sets
+        debug_print("Step 5: Splitting training data into train and validation sets")
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+        debug_print(f"Train set shape: {X_train.shape}")
+        debug_print(f"Validation set shape: {X_val.shape}")
+        
+        # 6. Train model with cross-validation
+        debug_print("Step 6: Training model")
+        best_model, val_metrics = train_model_with_cv(
+            X_train, y_train, 
+            num_classes=num_classes, 
+            window_size=window_size
         )
         
-        print(f"\nDevice fingerprinting completed successfully!")
-        return 0
+        # 7. Load and process test files one by one
+        debug_print("Step 7: Evaluating model on test files")
+        
+        all_test_metrics = []
+        for test_file in test_files:
+            file_name = os.path.basename(test_file)
+            debug_print(f"\nEvaluating on test file: {file_name}")
+            
+            # Load test file
+            test_df = pd.read_csv(test_file)
+            debug_print(f"Test file shape: {test_df.shape}")
+            
+            # Preprocess test data
+            test_features, test_labels, _, _, _, _ = preprocess_data(
+                test_df, encoders=encoders, scaler=scaler, is_training=False
+            )
+            
+            # Create sequences
+            X_test, y_test = create_sequences(
+                test_features, test_labels, window_size=window_size, stride=stride
+            )
+            
+            debug_print(f"Test sequences shape: {X_test.shape}")
+            
+            # Evaluate model
+            class_names = encoders['SCADA_Tag'].classes_ if 'SCADA_Tag' in encoders else None
+            y_pred_classes, metrics = evaluate_model(best_model, X_test, y_test, class_names)
+            
+            # Store metrics for this test file
+            file_metrics = {
+                'file': file_name,
+                'accuracy': metrics['accuracy'],
+                'f1_score': metrics['f1_score']
+            }
+            all_test_metrics.append(file_metrics)
+        
+        # 8. Display overall test results
+        debug_print("\nOverall test results:")
+        for metrics in all_test_metrics:
+            debug_print(f"File: {metrics['file']}, Accuracy: {metrics['accuracy']:.4f}, F1 Score: {metrics['f1_score']:.4f}")
+        
+        # Calculate average metrics
+        avg_accuracy = np.mean([m['accuracy'] for m in all_test_metrics])
+        avg_f1 = np.mean([m['f1_score'] for m in all_test_metrics])
+        debug_print(f"\nAverage test accuracy: {avg_accuracy:.4f}")
+        debug_print(f"Average test F1 score: {avg_f1:.4f}")
+        
+        # 9. Save model and artifacts
+        debug_print("Step 9: Saving model and artifacts")
+        # Create model directory
+        model_dir = os.path.join(os.getcwd(), "model")
+        debug_print(f"Creating model directory at: {model_dir}")
+        os.makedirs(model_dir, exist_ok=True)
+        
+        save_model_and_artifacts(
+            best_model, encoders, scaler, 
+            feature_cols, num_classes, window_size,
+            base_path=model_dir
+        )
+        
+        # Save test metrics
+        metrics_path = os.path.join(model_dir, "test_metrics.json")
+        with open(metrics_path, "w") as f:
+            json.dump({
+                'test_files': [os.path.basename(f) for f in test_files],
+                'file_metrics': all_test_metrics,
+                'average_accuracy': float(avg_accuracy),
+                'average_f1_score': float(avg_f1)
+            }, f, indent=2)
+        
+        debug_print(f"Model training complete with average test accuracy: {avg_accuracy:.4f}")
+        debug_print(f"All artifacts saved to: {model_dir}")
         
     except Exception as e:
-        print(f"Error during inference: {str(e)}")
+        debug_print(f"ERROR in main function: {e}")
         import traceback
         traceback.print_exc()
-        return 1
+        return False
+    
+    debug_print("Main function completed successfully")
+    return True
 
 if __name__ == "__main__":
-    sys.exit(main())
+    debug_print("Starting script")
+    success = main()
+    debug_print(f"Script completed with status: {'SUCCESS' if success else 'FAILURE'}")
