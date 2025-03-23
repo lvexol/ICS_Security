@@ -1,0 +1,16 @@
+file,accuracy,precision,recall,f1,status
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_11.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_4.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_7.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_15.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_1.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_8.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_2.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_14.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_10.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_12.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_5.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_13.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_3.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_6.csv,,,,,skipped - no label column
+/home/vexo/Project/rewrite/ICS_Security/Data/preprocessed_batch_9.csv,,,,,skipped - no label column
